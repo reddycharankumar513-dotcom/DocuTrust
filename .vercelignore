@@ -1,0 +1,13 @@
+requirements.txt
+*.py
+*.pdf
+*.pptx
+*.zip
+backend/
+docutrust/backend/
+docutrust/scripts/
+docutrust/docs/
+Dockerfile
+docker-compose.yml
+storage/
+data/
