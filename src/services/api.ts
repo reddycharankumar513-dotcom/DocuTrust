@@ -5,7 +5,10 @@ export const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:80
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 120000
+  timeout: 120000,
+  headers: {
+    "Bypass-Tunnel-Reminder": "true"
+  }
 });
 
 export function setAuthToken(token: string | null) {
