@@ -1,7 +1,26 @@
 import axios from "axios";
 import type { AuthResponse, ChatResponse, Dashboard, DocumentRecord, UserProfile } from "@/types";
 
-export const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+function resolveBaseUrl(): string {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && typeof envUrl === "string" && envUrl.trim() !== "") {
+    return envUrl.trim();
+  }
+
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    // Local development connects directly to local FastAPI server
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "http://localhost:8000";
+    }
+    // On Vercel or any cloud-deployed domain, use relative /api
+    return "/api";
+  }
+
+  return "http://localhost:8000";
+}
+
+export const API_BASE_URL = resolveBaseUrl();
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,6 +29,37 @@ export const api = axios.create({
     "Bypass-Tunnel-Reminder": "true"
   }
 });
+
+// Automatic Network Error Recovery Interceptor
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const isNetworkError =
+      error.message === "Network Error" ||
+      error.code === "ERR_NETWORK" ||
+      error.code === "ECONNABORTED" ||
+      !error.response;
+
+    const originalRequest = error.config;
+
+    // If an external backend or mixed-content call fails on Vercel, auto-fallback to internal /api
+    if (
+      isNetworkError &&
+      originalRequest &&
+      !originalRequest._retryWithInternalApi &&
+      typeof window !== "undefined" &&
+      window.location.hostname !== "localhost" &&
+      window.location.hostname !== "127.0.0.1" &&
+      originalRequest.baseURL !== "/api"
+    ) {
+      originalRequest._retryWithInternalApi = true;
+      originalRequest.baseURL = "/api";
+      return api(originalRequest);
+    }
+
+    return Promise.reject(error);
+  }
+);
 
 export function setAuthToken(token: string | null) {
   if (token) {
@@ -77,9 +127,14 @@ export async function setChatFavorite(chatId: string, favorite: boolean) {
 }
 
 export function chatSocketUrl(token: string) {
-  const url = new URL(API_BASE_URL);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = "/ws/chat";
-  url.searchParams.set("token", token);
-  return url.toString();
+  try {
+    const base = API_BASE_URL.startsWith("http") ? API_BASE_URL : window.location.origin;
+    const url = new URL(base);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    url.pathname = "/ws/chat";
+    url.searchParams.set("token", token);
+    return url.toString();
+  } catch {
+    return "";
+  }
 }
